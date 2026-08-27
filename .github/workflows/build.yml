@@ -17,6 +17,7 @@ jobs:
     outputs:
       version: ${{ steps.get-version-and-id.outputs.VERSION }}
       driver_id: ${{ steps.get-version-and-id.outputs.DRIVER_ID }}
+      artifact_base: ${{ steps.get-version-and-id.outputs.ARTIFACT_BASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -27,11 +28,14 @@ jobs:
         id: get-version-and-id
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
+          DRIVER_ID=$(jq .driver_id -r driver.json)
+          ARTIFACT_BASE="uc-intg-${INTG_NAME//_/-}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          DRIVER_BASE=$(jq .driver_id -r driver.json | sed 's/^uc-intg-//')
-          echo "DRIVER_ID=$DRIVER_BASE" >> $GITHUB_ENV
+          echo "DRIVER_ID=$DRIVER_ID" >> $GITHUB_ENV
+          echo "ARTIFACT_BASE=$ARTIFACT_BASE" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "DRIVER_ID=$DRIVER_BASE" >> $GITHUB_OUTPUT
+          echo "DRIVER_ID=$DRIVER_ID" >> $GITHUB_OUTPUT
+          echo "ARTIFACT_BASE=$ARTIFACT_BASE" >> $GITHUB_OUTPUT
 
       - name: Build
         run: |
@@ -60,7 +64,7 @@ jobs:
           mv dist/intg-${{ env.DRIVER_ID }}/* artifacts/bin
           mv artifacts/bin/intg-${{ env.DRIVER_ID }} artifacts/bin/driver
           cp driver.json artifacts/
-          echo "ARTIFACT_NAME=uc-intg-${{ env.DRIVER_ID }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=${{ env.ARTIFACT_BASE }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
 
       - name: Create upload artifact archive
         shell: bash
@@ -141,12 +145,12 @@ jobs:
 
       - name: Create hash file
         run: |
-          for filename in *.tar.gz; do echo "sha256  `sha256sum $filename`" >> ${{needs.build.outputs.driver_id}}.hash; done;
+          for filename in *.tar.gz; do echo "sha256  `sha256sum $filename`" >> ${{needs.build.outputs.artifact_base}}.hash; done;
 
       - name: Create release draft
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "*.tar.gz,${{needs.build.outputs.driver_id}}.hash"
+          artifacts: "*.tar.gz,${{needs.build.outputs.artifact_base}}.hash"
           draft: true
           generateReleaseNotes: true
           artifactErrorsFailBuild: true
