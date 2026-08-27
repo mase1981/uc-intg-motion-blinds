@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uc-intg-motion-blinds"
+version = "1.0.0"
+description = "Motion Blinds integration for Unfolded Circle Remote Two/3"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MPL-2.0"}
+authors = [
+    {name = "Meir Miyara", email = "meir.miyara@gmail.com"}
+]
+keywords = ["motion-blinds", "coulisse", "brel-home", "blinds", "shades", "cover", "unfolded-circle", "remote", "integration"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Home Automation",
+]
+dependencies = [
+    "ucapi>=0.7.0",
+    "ucapi-framework>=1.9.6",
+    "motionblinds>=0.6.30",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/mase1981/uc-intg-motion-blinds"
+"Bug Reports" = "https://github.com/mase1981/uc-intg-motion-blinds/issues"
+"Source" = "https://github.com/mase1981/uc-intg-motion-blinds"
+
+[project.scripts]
+uc-intg-motion-blinds = "uc_intg_motion_blinds:main"
+
+[tool.setuptools.packages.find]
+include = ["uc_intg_motion_blinds*"]
+
+[tool.setuptools.package-data]
+uc_intg_motion_blinds = ["*.json"]

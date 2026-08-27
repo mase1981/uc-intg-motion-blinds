@@ -1,0 +1,39 @@
+{
+  "driver_id": "uc_intg_motion_blinds",
+  "version": "1.0.0",
+  "min_core_api": "0.22.0",
+  "name": {
+    "en": "Motion Blinds"
+  },
+  "icon": "uc:blinds",
+  "description": {
+    "en": "Control Motion Blinds (Coulisse) motorized blinds and shades - also sold as Brel Home, Smart Home, Bloc Blinds and other brands - through their local gateway. Each paired blind appears as a cover entity with open, close, stop and set-position control, plus tilt for venetian and shutter types. Control is entirely local over your network; no cloud account is required, only the gateway API key from the app."
+  },
+  "developer": {
+    "name": "Meir Miyara",
+    "email": "meir.miyara@gmail.com",
+    "url": "https://github.com/mase1981"
+  },
+  "home_page": "https://github.com/mase1981/uc-intg-motion-blinds",
+  "release_date": "2026-08-27",
+  "setup_data_schema": {
+    "title": {
+      "en": "Motion Blinds Gateway Setup"
+    },
+    "settings": [
+      {
+        "id": "info",
+        "label": {
+          "en": "Motion Blinds Gateway"
+        },
+        "field": {
+          "label": {
+            "value": {
+              "en": "On the next screen enter the 16-character API Key from the Motion Blinds app (gateway settings - reveal it by tapping the app version 5 times on the About screen). Leave the IP address blank to discover the gateway automatically, or enter it if discovery fails. The gateway must be powered on and connected to your network."
+            }
+          }
+        }
+      }
+    ]
+  }
+}
