@@ -53,6 +53,7 @@ def enumerate_blinds(gateway: MotionGateway) -> list[dict[str, Any]]:
             _LOG.debug("Initial update failed for blind %s: %s", mac, err)
         max_angle = getattr(blind, "max_angle", DEFAULT_MAX_ANGLE) or DEFAULT_MAX_ANGLE
         blind_type = _blind_type_name(blind)
+        has_battery = getattr(blind, "battery_level", None) is not None
         blinds.append(
             {
                 "mac": mac,
@@ -60,6 +61,7 @@ def enumerate_blinds(gateway: MotionGateway) -> list[dict[str, Any]]:
                 "blind_type": blind_type,
                 "device_type": getattr(blind, "device_type", "") or "",
                 "max_angle": int(max_angle),
+                "has_battery": has_battery,
             }
         )
     return blinds

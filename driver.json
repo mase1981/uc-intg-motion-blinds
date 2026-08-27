@@ -7,7 +7,7 @@
   },
   "icon": "uc:blinds",
   "description": {
-    "en": "Control Motion Blinds (Coulisse) motorized blinds and shades - also sold as Brel Home, Smart Home, Bloc Blinds and other brands - through their local gateway. Each paired blind appears as a cover entity with open, close, stop and set-position control, plus tilt for venetian and shutter types. Control is entirely local over your network; no cloud account is required, only the gateway API key from the app."
+    "en": "Control Motion Blinds (Coulisse) motorized blinds and shades - also sold as Brel Home, Smart Home, Bloc Blinds and other brands - through their local gateway. Each paired blind appears as a cover entity with open, close, stop and set-position control, plus tilt for venetian and shutter types, and battery and signal sensors. Control is entirely local over your network; no cloud account is required, only the gateway API key from the app."
   },
   "developer": {
     "name": "Meir Miyara",

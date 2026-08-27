@@ -25,10 +25,14 @@ Any blind or shade paired to a **Motion gateway** (Coulisse Motion, Brel Home hu
 
 - **🪟 Cover entity per blind** - each paired blind becomes its own cover with **Open**, **Close**, **Stop**, and **Set Position** (0-100%).
 - **🎚️ Tilt control** - venetian blinds and shutters also expose **tilt position**, tilt open/close, and tilt stop.
+- **🔋 Battery sensor** - battery-powered blinds report their charge level (%).
+- **📶 Signal sensor** - each blind reports its signal strength (dBm) to the gateway.
 - **📡 Automatic discovery** - the gateway is found on the network automatically; you only supply the API key.
 - **🔄 Live state** - position, tilt, and open/closed/opening/closing state are polled from the gateway.
 - **🔒 Fully local** - direct LAN control through the gateway; no Motion/Brel cloud account and no internet in the loop.
 - **Multi-gateway** - add each Motion gateway on your network; all of its blinds appear as covers.
+
+> Blinds are window coverings, so the applicable entity types are **cover** and **sensor** - the same platforms the Home Assistant Motion Blinds integration exposes. Media-player, remote, and select entities are for audio/video devices and do not apply to blinds.
 
 ---
 ## ❤️ Support Development ❤️
@@ -111,6 +115,8 @@ For each gateway the integration creates:
 | Entity | Purpose |
 |--------|---------|
 | **Cover** (one per blind) | Open, close, stop, and set position; plus tilt position / tilt open-close-stop for venetian and shutter blinds. |
+| **Signal sensor** (one per blind) | Signal strength (dBm) between the blind and the gateway. |
+| **Battery sensor** (battery blinds) | Battery charge level (%); created only for blinds that report a battery. |
 
 ## Troubleshooting
 

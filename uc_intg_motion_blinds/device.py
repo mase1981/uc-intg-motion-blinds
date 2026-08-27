@@ -46,6 +46,8 @@ class MotionBlindsDevice(PollingDevice):
         self.cover_state: dict[str, str] = {}
         self.cover_position: dict[str, int | None] = {}
         self.cover_tilt: dict[str, int | None] = {}
+        self.battery: dict[str, int | None] = {}
+        self.rssi: dict[str, int | None] = {}
 
     # -- identity ------------------------------------------------------
     @property
@@ -140,6 +142,11 @@ class MotionBlindsDevice(PollingDevice):
                 self.cover_tilt[mac] = None
 
             self.cover_state[mac] = self._derive_state(status_name, raw_pos, has_tilt)
+
+            battery = getattr(blind, "battery_level", None)
+            self.battery[mac] = int(battery) if battery is not None else None
+            rssi = getattr(blind, "RSSI", None)
+            self.rssi[mac] = int(rssi) if rssi is not None else None
 
     @staticmethod
     def _derive_state(status_name: str, raw_pos: int | None, has_tilt: bool) -> str:
