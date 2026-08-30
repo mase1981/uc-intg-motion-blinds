@@ -25,14 +25,14 @@ Any blind or shade paired to a **Motion gateway** (Coulisse Motion, Brel Home hu
 
 - **🪟 Cover entity per blind** - each paired blind becomes its own cover with **Open**, **Close**, **Stop**, and **Set Position** (0-100%).
 - **🎚️ Tilt control** - venetian blinds and shutters also expose **tilt position**, tilt open/close, and tilt stop.
+- **🎯 Position select per blind** - a quick-preset picker: **Open, 75%, 50%, 25%, Closed**, and **Favourite**.
+- **🕹️ Gateway remote** - one remote entity per gateway with an on-screen page per blind (open/close/stop/favourite, tilt and position presets) plus **All Open / All Close / All Stop**, usable in activities and mapped to the D-pad.
 - **🔋 Battery sensor** - battery-powered blinds report their charge level (%).
-- **📶 Signal sensor** - each blind reports its signal strength (dBm) to the gateway.
+- **📶 Signal sensor** - each blind reports its signal strength (dBm) to the gateway, plus a gateway signal sensor.
 - **📡 Automatic discovery** - the gateway is found on the network automatically; you only supply the API key.
-- **🔄 Live state** - position, tilt, and open/closed/opening/closing state are polled from the gateway.
+- **🔄 Live state** - position, tilt, and open/closed/opening/closing state update in real time via the gateway's multicast push.
 - **🔒 Fully local** - direct LAN control through the gateway; no Motion/Brel cloud account and no internet in the loop.
 - **Multi-gateway** - add each Motion gateway on your network; all of its blinds appear as covers.
-
-> Blinds are window coverings, so the applicable entity types are **cover** and **sensor** - the same platforms the Home Assistant Motion Blinds integration exposes. Media-player, remote, and select entities are for audio/video devices and do not apply to blinds.
 
 ---
 ## ❤️ Support Development ❤️
@@ -115,8 +115,11 @@ For each gateway the integration creates:
 | Entity | Purpose |
 |--------|---------|
 | **Cover** (one per blind) | Open, close, stop, and set position; plus tilt position / tilt open-close-stop for venetian and shutter blinds. |
+| **Position select** (one per blind) | Quick preset positions - Open, 75%, 50%, 25%, Closed - and Favourite; created for blinds that support positioning. |
+| **Remote** (one per gateway) | Dashboard with a page per blind (open/close/stop/favourite, tilt and position presets) and All Open / All Close / All Stop; every action is a simple command for activities, with the D-pad mapped to All Open/Close/Stop. |
 | **Signal sensor** (one per blind) | Signal strength (dBm) between the blind and the gateway. |
 | **Battery sensor** (battery blinds) | Battery charge level (%); created only for blinds that report a battery. |
+| **Gateway signal sensor** (one per gateway) | Wi-Fi signal strength (dBm) of the gateway itself. |
 
 ## Troubleshooting
 

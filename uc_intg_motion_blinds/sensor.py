@@ -62,9 +62,32 @@ class SignalSensor(SensorEntity):
         self.update({sensor.Attributes.STATE: sensor.States.ON, sensor.Attributes.VALUE: value})
 
 
+class GatewaySignalSensor(SensorEntity):
+    """Wi-Fi signal strength (dBm) of the gateway itself."""
+
+    def __init__(self, device_config: MotionBlindsConfig, device: MotionBlindsDevice) -> None:
+        self._device = device
+        super().__init__(
+            f"sensor.{device_config.identifier}.gateway.signal",
+            f"{device_config.name} Gateway Signal",
+            [],
+            {sensor.Attributes.STATE: sensor.States.UNKNOWN, sensor.Attributes.VALUE: 0},
+            device_class=sensor.DeviceClasses.CUSTOM,
+            options={sensor.Options.CUSTOM_UNIT: "dBm"},
+        )
+        self.subscribe_to_device(device)
+
+    async def sync_state(self) -> None:
+        value = self._device.gateway_rssi
+        if self._device.state == STATE_UNAVAILABLE or value is None:
+            self.update({sensor.Attributes.STATE: sensor.States.UNAVAILABLE})
+            return
+        self.update({sensor.Attributes.STATE: sensor.States.ON, sensor.Attributes.VALUE: value})
+
+
 def create_sensors(device_config: MotionBlindsConfig, device: MotionBlindsDevice) -> list[SensorEntity]:
-    """Build a signal sensor per blind and a battery sensor per battery-powered blind."""
-    entities: list[SensorEntity] = []
+    """Build a signal sensor per blind, a battery sensor per battery-powered blind, and a gateway signal sensor."""
+    entities: list[SensorEntity] = [GatewaySignalSensor(device_config, device)]
     for meta in device_config.blinds:
         if not meta.get("mac"):
             continue

@@ -71,6 +71,15 @@ class MotionBlindsDevice(PollingDevice):
     def state(self) -> str:
         return self._state
 
+    @property
+    def gateway_rssi(self) -> int | None:
+        rssi = getattr(self._gateway, "RSSI", None)
+        return int(rssi) if rssi is not None else None
+
+    @property
+    def gateway_firmware(self) -> str | None:
+        return getattr(self._gateway, "firmware", None)
+
     def blind_meta(self, mac: str) -> dict[str, Any]:
         return self._meta.get(mac, {})
 
@@ -86,6 +95,7 @@ class MotionBlindsDevice(PollingDevice):
                 self._gateway.Register_callback(self.identifier, self._on_gateway_push)
             try:
                 await asyncio.to_thread(self._gateway.GetDeviceList)
+                await asyncio.to_thread(self._gateway.Update)
             except Exception as err:  # pylint: disable=broad-exception-caught
                 raise ConnectionError(f"Cannot reach gateway at {self.address}: {err}") from err
 
@@ -158,7 +168,8 @@ class MotionBlindsDevice(PollingDevice):
             has_tilt = meta.get("blind_type", "") in TILT_TYPES
             raw_pos = getattr(blind, "position", None)
             raw_angle = getattr(blind, "angle", None)
-            status_name = getattr(getattr(blind, "status", None), "name", "")
+            status = getattr(blind, "status", None)
+            status_name = status if isinstance(status, str) else ""
 
             if raw_pos is None:
                 self.cover_position[mac] = None
@@ -234,3 +245,6 @@ class MotionBlindsDevice(PollingDevice):
 
     async def tilt_stop(self, mac: str) -> bool:
         return await self._run_blind(mac, "Stop")
+
+    async def go_favorite(self, mac: str) -> bool:
+        return await self._run_blind(mac, "Go_favorite_position")
