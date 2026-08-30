@@ -33,9 +33,10 @@ class MotionBlindsDevice(PollingDevice):
     """One Motion Blinds gateway with its attached blinds."""
 
     def __init__(self, device_config: MotionBlindsConfig, **kwargs: Any) -> None:
-        super().__init__(device_config, poll_interval=20, **kwargs)
+        super().__init__(device_config, poll_interval=60, **kwargs)
         self._device_config = device_config
         self._gateway = None
+        self._multicast = None
         self._blinds: dict[str, Any] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
         self._state: str = STATE_UNAVAILABLE
@@ -77,7 +78,12 @@ class MotionBlindsDevice(PollingDevice):
     async def establish_connection(self):
         async with self._lock:
             if self._gateway is None:
-                self._gateway = gw.build_gateway(self._device_config.host, self._device_config.key)
+                self._multicast = gw.build_multicast()
+                await asyncio.to_thread(self._multicast.Start_listen)
+                self._gateway = gw.build_gateway(
+                    self._device_config.host, self._device_config.key, self._multicast
+                )
+                self._gateway.Register_callback(self.identifier, self._on_gateway_push)
             try:
                 await asyncio.to_thread(self._gateway.GetDeviceList)
             except Exception as err:  # pylint: disable=broad-exception-caught
@@ -85,10 +91,11 @@ class MotionBlindsDevice(PollingDevice):
 
             self._blinds = dict(self._gateway.device_list)
             for mac, blind in self._blinds.items():
+                blind.Register_callback(self.identifier, self._on_gateway_push)
                 try:
-                    await asyncio.to_thread(blind.Update)
+                    await asyncio.to_thread(blind.Update_from_cache)
                 except Exception as err:  # pylint: disable=broad-exception-caught
-                    _LOG.debug("[%s] Initial update failed for %s: %s", self.log_id, mac, err)
+                    _LOG.debug("[%s] Initial read failed for %s: %s", self.log_id, mac, err)
             self._refresh_cache()
             self._state = STATE_ON
 
@@ -101,21 +108,44 @@ class MotionBlindsDevice(PollingDevice):
         try:
             async with self._lock:
                 await asyncio.to_thread(self._gateway.Update)
-                for mac, blind in self._blinds.items():
-                    try:
-                        await asyncio.to_thread(blind.Update)
-                    except Exception as err:  # pylint: disable=broad-exception-caught
-                        _LOG.debug("[%s] Poll update failed for %s: %s", self.log_id, mac, err)
-                self._refresh_cache()
-            self.push_update()
         except Exception as err:  # pylint: disable=broad-exception-caught
             _LOG.debug("[%s] Poll error: %s", self.log_id, err)
             if self._state != STATE_UNAVAILABLE:
                 self._state = STATE_UNAVAILABLE
                 self.events.emit(DeviceEvents.DISCONNECTED, self.identifier)
+            return
+
+        for mac, blind in list(self._blinds.items()):
+            try:
+                async with self._lock:
+                    await asyncio.to_thread(blind.Update_from_cache)
+            except Exception as err:  # pylint: disable=broad-exception-caught
+                _LOG.debug("[%s] Poll read failed for %s: %s", self.log_id, mac, err)
+
+        self._refresh_cache()
+        if self._state != STATE_ON:
+            self._state = STATE_ON
+        self.push_update()
+
+    def _on_gateway_push(self) -> None:
+        """Marshal a multicast push from the listener thread onto the event loop."""
+        self._loop.call_soon_threadsafe(self._handle_gateway_push)
+
+    def _handle_gateway_push(self) -> None:
+        self._refresh_cache()
+        if self._state != STATE_ON:
+            self._state = STATE_ON
+        self.push_update()
 
     async def disconnect(self) -> None:
         async with self._lock:
+            if self._multicast is not None:
+                try:
+                    self._multicast.Unregister_motion_gateway(self._device_config.host)
+                    await asyncio.to_thread(self._multicast.Stop_listen)
+                except Exception as err:  # pylint: disable=broad-exception-caught
+                    _LOG.debug("[%s] Multicast stop failed: %s", self.log_id, err)
+                self._multicast = None
             self._gateway = None
             self._blinds = {}
         self._state = STATE_UNAVAILABLE

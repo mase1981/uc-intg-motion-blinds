@@ -11,16 +11,25 @@ import logging
 import re
 from typing import Any
 
-from motionblinds import MotionDiscovery, MotionGateway
+from motionblinds import MotionDiscovery, MotionGateway, MotionMulticast
 
 from uc_intg_motion_blinds.const import DEFAULT_MAX_ANGLE
 
 _LOG = logging.getLogger(__name__)
 
 
-def build_gateway(host: str, key: str) -> MotionGateway:
-    """Create a MotionGateway bound to a host and API key."""
-    return MotionGateway(ip=host, key=key)
+def build_multicast() -> MotionMulticast:
+    """Create a multicast listener for gateway push updates."""
+    return MotionMulticast()
+
+
+def build_gateway(host: str, key: str, multicast: MotionMulticast | None = None) -> MotionGateway:
+    """Create a MotionGateway bound to a host and API key.
+
+    ``timeout`` and ``mcast_timeout`` are kept low so a single command or status
+    read cannot stall long enough to exceed the Remote's request window.
+    """
+    return MotionGateway(ip=host, key=key, timeout=2.0, mcast_timeout=3.0, multicast=multicast)
 
 
 def discover_gateways(timeout: float = 6.0) -> list[dict[str, str]]:
