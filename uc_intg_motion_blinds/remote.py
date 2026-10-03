@@ -1,5 +1,6 @@
 """Remote entity - one dashboard per gateway with a UI page per blind."""
 
+import asyncio
 import logging
 import re
 from typing import Any
@@ -139,10 +140,25 @@ class MotionBlindsRemote(RemoteEntity):
         if cmd_id not in (remote.Commands.SEND_CMD, remote.Commands.SEND_CMD_SEQUENCE):
             return StatusCodes.NOT_IMPLEMENTED
 
-        commands = params.get("sequence") or [params.get("command", "")]
+        if cmd_id == remote.Commands.SEND_CMD_SEQUENCE:
+            commands = params.get("sequence") or []
+            if isinstance(commands, str):
+                commands = commands.split(",")
+        else:
+            commands = [params.get("command", "")]
+        commands = [str(command).strip() for command in commands if str(command).strip()]
+        if not commands:
+            return StatusCodes.BAD_REQUEST
+
+        repeat, delay = _repeat_delay(params)
         ok = True
-        for command in commands:
-            ok = await self._dispatch(command) and ok
+        first = True
+        for _ in range(repeat):
+            for command in commands:
+                if not first and delay:
+                    await asyncio.sleep(delay)
+                first = False
+                ok = await self._dispatch(command) and ok
         return StatusCodes.OK if ok else StatusCodes.SERVER_ERROR
 
     async def _dispatch(self, command: str) -> bool:
@@ -150,11 +166,24 @@ class MotionBlindsRemote(RemoteEntity):
             action = {ALL_OPEN: "OPEN", ALL_CLOSE: "CLOSE", ALL_STOP: "STOP"}[command]
             results = [await self._run_action(b["mac"], action) for b in self._blinds]
             return any(results)
-        target = self._cmd_map.get(command)
+        target = self._cmd_map.get(command) or self._cmd_map.get(command.upper())
         if target is None:
             _LOG.warning("Unknown remote command: %s", command)
             return False
         return await self._run_action(*target)
+
+
+def _repeat_delay(params: dict[str, Any]) -> tuple[int, float]:
+    """Repeat count (at least 1) and delay in seconds from the command parameters."""
+    try:
+        repeat = max(1, int(params.get("repeat") or 1))
+    except (TypeError, ValueError):
+        repeat = 1
+    try:
+        delay = max(0, int(params.get("delay") or 0)) / 1000
+    except (TypeError, ValueError):
+        delay = 0.0
+    return repeat, delay
 
 
 def create_remote(device_config: MotionBlindsConfig, device: MotionBlindsDevice) -> list[RemoteEntity]:

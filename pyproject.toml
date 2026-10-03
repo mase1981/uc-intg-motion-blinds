@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uc-intg-motion-blinds"
-version = "1.1.0"
+version = "1.1.1"
 description = "Motion Blinds integration for Unfolded Circle Remote Two/3"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,7 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "ucapi>=0.7.0",
-    "ucapi-framework>=1.9.6",
+    "ucapi-framework>=1.9.7",
     "motionblinds>=0.6.30",
 ]
 

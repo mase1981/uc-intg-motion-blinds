@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 from ucapi import RequestUserInput
@@ -22,10 +23,18 @@ class MotionBlindsSetupFlow(BaseSetupFlow[MotionBlindsConfig]):
         self._key: str = ""
         self._gateways: list[dict[str, str]] = []
 
-    def get_manual_entry_form(self) -> RequestUserInput:
+    def get_manual_entry_form(self, error: str = "", values: dict | None = None) -> RequestUserInput:
+        values = values or {}
+        fields = []
+        if error:
+            fields.append({
+                "id": "error",
+                "label": {"en": "Problem"},
+                "field": {"label": {"value": {"en": error}}},
+            })
         return RequestUserInput(
             {"en": "Motion Blinds Gateway Setup"},
-            [
+            fields + [
                 {
                     "id": "info",
                     "label": {"en": "Motion Blinds Gateway"},
@@ -40,42 +49,54 @@ class MotionBlindsSetupFlow(BaseSetupFlow[MotionBlindsConfig]):
                 {
                     "id": "key",
                     "label": {"en": "API Key (16 characters)"},
-                    "field": {"text": {"value": ""}},
+                    "field": {"text": {"value": values.get("key", "")}},
                 },
                 {
                     "id": "host",
                     "label": {"en": "Gateway IP Address (optional)"},
-                    "field": {"text": {"value": ""}},
+                    "field": {"text": {"value": values.get("host", "")}},
                 },
             ],
         )
 
     async def query_device(self, input_values: dict[str, Any]) -> MotionBlindsConfig | RequestUserInput:
-        key = input_values.get("key", "").strip()
+        # A gateway picked from the list comes back through here as well.
+        if input_values.get("gateway"):
+            return await self._from_picker(input_values["gateway"])
+
+        key = re.sub(r"\s+", "", str(input_values.get("key") or ""))
+        host = re.sub(r"\s+", "", str(input_values.get("host") or ""))
+        values = {"key": key, "host": host}
         if len(key) != KEY_LENGTH:
-            raise ValueError(
-                f"The API Key must be exactly {KEY_LENGTH} characters. Get it from the Motion "
-                "Blinds app gateway settings."
+            return self.get_manual_entry_form(
+                f"The API Key must be exactly {KEY_LENGTH} characters (you entered {len(key)}). "
+                "Get it from the Motion Blinds app gateway settings.",
+                values,
             )
         self._key = key
-        host = input_values.get("host", "").strip()
 
         if host:
-            return await self._build_config(host, key)
+            try:
+                return await self._build_config(host, key)
+            except ValueError as err:
+                return self.get_manual_entry_form(str(err), values)
 
         _LOG.info("Discovering Motion Blinds gateways on the network...")
         self._gateways = await asyncio.to_thread(gw.discover_gateways, 6.0)
         _LOG.info("Discovered %d gateway(s)", len(self._gateways))
 
         if not self._gateways:
-            raise ValueError(
+            return self.get_manual_entry_form(
                 "No Motion Blinds gateway was found on the network. Make sure the gateway is "
-                "powered on and on the same network as the Remote, then try again and enter "
-                "the IP address manually."
+                "powered on and on the same network as the Remote, then enter its IP address.",
+                values,
             )
 
         if len(self._gateways) == 1:
-            return await self._build_config(self._gateways[0]["host"], key, self._gateways[0].get("mac", ""))
+            try:
+                return await self._build_config(self._gateways[0]["host"], key, self._gateways[0].get("mac", ""))
+            except ValueError as err:
+                return self.get_manual_entry_form(str(err), {**values, "host": self._gateways[0]["host"]})
 
         items = [
             {"id": g["host"], "label": {"en": f"Gateway {g.get('mac', '')[-4:]} ({g['host']})"}}
@@ -90,13 +111,23 @@ class MotionBlindsSetupFlow(BaseSetupFlow[MotionBlindsConfig]):
             }],
         )
 
-    async def handle_additional_configuration_response(self, msg: Any) -> MotionBlindsConfig | None:
-        host = msg.input_values.get("gateway", "")
+    async def handle_additional_configuration_response(self, msg: Any) -> MotionBlindsConfig | RequestUserInput | None:
+        # Kept for safety; the picker answer normally arrives in query_device().
+        result = await self._from_picker(msg.input_values.get("gateway", ""))
+        if isinstance(result, MotionBlindsConfig):
+            self._pending_device_config = result
+            return None
+        self._pending_device_config = None
+        return result
+
+    async def _from_picker(self, host: str) -> MotionBlindsConfig | RequestUserInput:
         selected = next((g for g in self._gateways if g["host"] == host), None)
         if not selected:
-            raise ValueError("Selected gateway not found")
-        self._pending_device_config = await self._build_config(host, self._key, selected.get("mac", ""))
-        return None
+            return self.get_manual_entry_form("That gateway is no longer listed. Enter its IP address.", {"key": self._key})
+        try:
+            return await self._build_config(host, self._key, selected.get("mac", ""))
+        except ValueError as err:
+            return self.get_manual_entry_form(str(err), {"key": self._key, "host": host})
 
     async def _build_config(self, host: str, key: str, mac: str = "") -> MotionBlindsConfig:
         gateway = gw.build_gateway(host, key)

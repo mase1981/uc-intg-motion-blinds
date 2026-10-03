@@ -4,12 +4,18 @@ The gateway speaks a local UDP protocol via the synchronous ``motionblinds``
 library, so every socket call is run in a thread and serialized behind a lock
 (rule 9). Position/angle are converted to the Unfolded Circle convention here so
 the cover entities stay dumb: position 0 = closed, 100 = open.
+
+The first connect often happens while the Remote is still waking up and its
+Wi-Fi is not back yet. The framework never retries a connect that raised, so
+``establish_connection`` never raises: it retries briefly, then leaves the
+device UNAVAILABLE and the poll loop (and any command) connects again later.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from ucapi import cover
@@ -28,6 +34,10 @@ from uc_intg_motion_blinds.const import (
 
 _LOG = logging.getLogger(__name__)
 
+_CONNECT_ATTEMPTS = 3  # at start-up, while the Remote's Wi-Fi comes back
+_CONNECT_RETRY_DELAY = 5.0
+_COMMAND_RECONNECT_GAP = 5.0  # a button press may retry the connection this often
+
 
 class MotionBlindsDevice(PollingDevice):
     """One Motion Blinds gateway with its attached blinds."""
@@ -40,6 +50,9 @@ class MotionBlindsDevice(PollingDevice):
         self._blinds: dict[str, Any] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
         self._state: str = STATE_UNAVAILABLE
+        self._connected_once = False
+        self._last_attempt = 0.0
+        self._failure_logged = False
 
         self._meta: dict[str, dict[str, Any]] = {
             b["mac"]: b for b in device_config.blinds if b.get("mac")
@@ -85,19 +98,29 @@ class MotionBlindsDevice(PollingDevice):
 
     # -- connection lifecycle ------------------------------------------
     async def establish_connection(self):
+        """Connect to the gateway; never raises (see module docstring)."""
+        for attempt in range(1, _CONNECT_ATTEMPTS + 1):
+            if await self._try_connect():
+                break
+            if attempt < _CONNECT_ATTEMPTS:
+                await asyncio.sleep(_CONNECT_RETRY_DELAY)
+        self.push_update()
+        return self._gateway
+
+    async def _try_connect(self) -> bool:
+        """Build the gateway objects and read the blind list. Returns success."""
         async with self._lock:
-            if self._gateway is None:
-                self._multicast = gw.build_multicast()
-                await asyncio.to_thread(self._multicast.Start_listen)
-                self._gateway = gw.build_gateway(
-                    self._device_config.host, self._device_config.key, self._multicast
-                )
-                self._gateway.Register_callback(self.identifier, self._on_gateway_push)
+            self._last_attempt = time.monotonic()
             try:
+                await self._rebuild_gateway()
                 await asyncio.to_thread(self._gateway.GetDeviceList)
                 await asyncio.to_thread(self._gateway.Update)
             except Exception as err:  # pylint: disable=broad-exception-caught
-                raise ConnectionError(f"Cannot reach gateway at {self.address}: {err}") from err
+                log = _LOG.debug if self._failure_logged else _LOG.warning
+                log("[%s] Cannot reach gateway at %s: %s (will retry)", self.log_id, self.address, err)
+                self._failure_logged = True
+                self._state = STATE_UNAVAILABLE
+                return False
 
             self._blinds = dict(self._gateway.device_list)
             for mac, blind in self._blinds.items():
@@ -108,12 +131,45 @@ class MotionBlindsDevice(PollingDevice):
                     _LOG.debug("[%s] Initial read failed for %s: %s", self.log_id, mac, err)
             self._refresh_cache()
             self._state = STATE_ON
+            self._failure_logged = False
+            if self._connected_once:
+                _LOG.info("[%s] Gateway reachable again", self.log_id)
+            self._connected_once = True
+        return True
 
-        self.push_update()
-        return self._gateway
+    async def _rebuild_gateway(self) -> None:
+        """Fresh gateway and multicast listener (a listener made while offline stays deaf)."""
+        await self._stop_multicast()
+        multicast = gw.build_multicast()
+        try:
+            await asyncio.to_thread(multicast.Start_listen)
+            self._multicast = multicast
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            # Push updates are optional; polling still keeps the state current.
+            _LOG.debug("[%s] Multicast listener not started: %s", self.log_id, err)
+            multicast = None
+        self._gateway = gw.build_gateway(self._device_config.host, self._device_config.key, multicast)
+        self._gateway.Register_callback(self.identifier, self._on_gateway_push)
+
+    async def _stop_multicast(self) -> None:
+        if self._multicast is None:
+            return
+        multicast, self._multicast = self._multicast, None
+        try:
+            multicast.Unregister_motion_gateway(self._device_config.host)
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+        try:
+            await asyncio.to_thread(multicast.Stop_listen)
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            _LOG.debug("[%s] Multicast stop failed: %s", self.log_id, err)
 
     async def poll_device(self) -> None:
-        if self._gateway is None:
+        if not self._blinds:
+            # Never connected (or lost the blind list): try again every poll.
+            if await self._try_connect():
+                self.events.emit(DeviceEvents.CONNECTED, self.identifier)
+            self.push_update()
             return
         try:
             async with self._lock:
@@ -135,6 +191,8 @@ class MotionBlindsDevice(PollingDevice):
         self._refresh_cache()
         if self._state != STATE_ON:
             self._state = STATE_ON
+            _LOG.info("[%s] Gateway reachable again", self.log_id)
+            self.events.emit(DeviceEvents.CONNECTED, self.identifier)
         self.push_update()
 
     def _on_gateway_push(self) -> None:
@@ -149,13 +207,7 @@ class MotionBlindsDevice(PollingDevice):
 
     async def disconnect(self) -> None:
         async with self._lock:
-            if self._multicast is not None:
-                try:
-                    self._multicast.Unregister_motion_gateway(self._device_config.host)
-                    await asyncio.to_thread(self._multicast.Stop_listen)
-                except Exception as err:  # pylint: disable=broad-exception-caught
-                    _LOG.debug("[%s] Multicast stop failed: %s", self.log_id, err)
-                self._multicast = None
+            await self._stop_multicast()
             self._gateway = None
             self._blinds = {}
         self._state = STATE_UNAVAILABLE
@@ -203,6 +255,11 @@ class MotionBlindsDevice(PollingDevice):
     # -- commands ------------------------------------------------------
     async def _run_blind(self, mac: str, method: str, *args: Any) -> bool:
         blind = self._blinds.get(mac)
+        if blind is None and not self._blinds:
+            # Not connected yet (e.g. the Remote just woke up): connect now, then run it.
+            if time.monotonic() - self._last_attempt >= _COMMAND_RECONNECT_GAP and await self._try_connect():
+                self.push_update()
+                blind = self._blinds.get(mac)
         if blind is None:
             _LOG.warning("[%s] Unknown blind: %s", self.log_id, mac)
             return False

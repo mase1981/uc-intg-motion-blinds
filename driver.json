@@ -1,6 +1,6 @@
 {
   "driver_id": "uc_intg_motion_blinds",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "min_core_api": "0.22.0",
   "name": {
     "en": "Motion Blinds"
@@ -15,7 +15,7 @@
     "url": "https://github.com/mase1981"
   },
   "home_page": "https://github.com/mase1981/uc-intg-motion-blinds",
-  "release_date": "2026-08-30",
+  "release_date": "2026-10-03",
   "setup_data_schema": {
     "title": {
       "en": "Motion Blinds Gateway Setup"
